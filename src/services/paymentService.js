@@ -11,6 +11,32 @@ import { generateTransactionCode } from '../utils/codeGenerator.js';
 ========================= */
 
 /**
+ * Verifica se gateway está configurado
+ */
+async function isGatewayConfigured() {
+  try {
+    const result = await db.query(
+      "SELECT value FROM settings WHERE key = 'gateway_config'"
+    );
+
+    if (!result.rows[0]) {
+      return false;
+    }
+
+    const config = result.rows[0].value;
+
+    // Verificar se tem pelo menos um gateway configurado
+    const hasAsaas = config.asaas && config.asaas.api_key;
+    const hasPagSeguro = config.pagseguro && config.pagseguro.token;
+
+    return hasAsaas || hasPagSeguro;
+  } catch (error) {
+    console.error('Erro ao verificar configuração de gateway:', error);
+    return false;
+  }
+}
+
+/**
  * Busca configuração de gateway ativa
  */
 async function getActiveGatewayConfig() {
@@ -23,6 +49,30 @@ async function getActiveGatewayConfig() {
   }
 
   return result.rows[0].value;
+}
+
+/**
+ * Gera PIX mock para desenvolvimento
+ */
+function generateMockPix(purchaseId, value) {
+  console.log('⚠️ MODO DESENVOLVIMENTO: Gerando PIX mock');
+
+  // Gerar código PIX mock (formato simplificado)
+  const mockPixCode = `00020126580014br.gov.bcb.pix2536api.sortebem.com.br/pix/v2/${purchaseId}52040000530398654${String(value).padStart(2, '0')}5802BR5913SORTEBEM LTDA6009SAO PAULO62070503***63044B8A`;
+
+  // QR Code mock (1x1 pixel transparente em base64)
+  const mockQrCode = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  return {
+    id: `mock-${purchaseId}`,
+    transactionCode: `TXN-MOCK-${Date.now()}`,
+    gateway: 'mock',
+    gatewayTransactionId: `mock-${purchaseId}`,
+    pixCopyPaste: mockPixCode,
+    pixQrCode: mockQrCode,
+    expiresAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+    value: value
+  };
 }
 
 /**
@@ -55,13 +105,56 @@ async function selectGateway(paymentMethod) {
  */
 export async function createPixPayment(params) {
   const { purchase, customer } = params;
-  const gateway = await selectGateway('pix');
-  const transactionCode = generateTransactionCode();
 
-  console.log('💳 createPixPayment chamado:', { purchaseId: purchase.id, gateway, customer });
+  console.log('💳 createPixPayment chamado:', { purchaseId: purchase.id, customer });
+
+  // Verificar se gateway está configurado
+  const gatewayConfigured = await isGatewayConfigured();
+  const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
+
+  console.log('🔑 Status de configuração:', {
+    gatewayConfigured,
+    isDevelopment,
+    NODE_ENV: process.env.NODE_ENV
+  });
 
   try {
     let chargeData;
+    let gateway;
+    const transactionCode = generateTransactionCode();
+
+    // Se não tem configuração e NÃO está em produção, usar PIX mock
+    if (!gatewayConfigured && isDevelopment) {
+      console.log('⚠️ Gateway não configurado - usando PIX mock para desenvolvimento');
+
+      const mockData = generateMockPix(purchase.id, purchase.total_amount);
+
+      // Atualizar purchase com dados mock
+      await db.query(
+        `UPDATE purchases
+         SET transaction_code = $1,
+             gateway = $2,
+             gateway_transaction_id = $3,
+             gateway_response = $4,
+             expires_at = $5
+         WHERE id = $6`,
+        [
+          mockData.transactionCode,
+          mockData.gateway,
+          mockData.gatewayTransactionId,
+          JSON.stringify({ mock: true, message: 'PIX gerado em modo desenvolvimento' }),
+          mockData.expiresAt,
+          purchase.id
+        ]
+      );
+
+      return mockData;
+    }
+
+    // Se não tem configuração e ESTÁ em produção, retornar erro
+    if (!gatewayConfigured && !isDevelopment) {
+      throw new Error('Gateway de pagamento não configurado. Configure as credenciais do Asaas ou PagSeguro.');
+    }
 
     // Preparar dados do customer com valores padrão
     const customerData = {
@@ -72,6 +165,10 @@ export async function createPixPayment(params) {
     };
 
     console.log('👤 Customer data preparado:', customerData);
+
+    // Selecionar gateway
+    gateway = await selectGateway('pix');
+    console.log('🎯 Gateway selecionado:', gateway);
 
     if (gateway === 'asaas') {
       // Criar/buscar cliente no Asaas
@@ -154,6 +251,23 @@ export async function createCreditCardPayment(params) {
   const transactionCode = generateTransactionCode();
 
   console.log('💳 createCreditCardPayment chamado:', { purchaseId: purchase.id, gateway, customer });
+
+  // Verificar se gateway está configurado
+  const gatewayConfigured = await isGatewayConfigured();
+  const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
+
+  console.log('🔑 Status de configuração:', {
+    gatewayConfigured,
+    isDevelopment,
+    NODE_ENV: process.env.NODE_ENV
+  });
+
+  // Cartão de crédito não tem modo mock - requer configuração real
+  if (!gatewayConfigured) {
+    const errorMessage = 'Gateway de pagamento não configurado. Configure as credenciais do PagSeguro para aceitar cartão de crédito.';
+    console.error('❌', errorMessage);
+    throw new Error(errorMessage);
+  }
 
   try {
     // Preparar dados do customer com valores padrão
