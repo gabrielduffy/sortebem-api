@@ -1,33 +1,37 @@
 import { db } from '../config/database.js';
 import { validate } from '../middleware/validate.js';
 import { generateCards } from '../services/cardGenerator.js';
-import { generatePix } from '../services/pixService.js';
+import { createPixPayment, createCreditCardPayment, checkPaymentStatus, refundPayment, handlePaymentWebhook } from '../services/paymentService.js';
 import { sendCardsViaWhatsApp } from '../services/whatsappService.js';
 import { successResponse, errorResponse, logAudit } from '../utils/helpers.js';
+import { authAdmin } from '../middleware/auth.js';
 
 export default async function purchasesRoutes(fastify) {
   // POST /purchases (público - criar compra)
-  fastify.post('/', {
-    preHandler: validate({
-      required: ['round_id', 'quantity', 'payment_method'],
-      fields: {
-        round_id: { type: 'number', min: 1 },
-        quantity: { type: 'number', min: 1, max: 100 },
-        payment_method: { type: 'string', enum: ['pix', 'credit_card', 'debit_card'] },
-        customer_whatsapp: { type: 'string' }
-      }
-    })
-  }, async (request, reply) => {
+  fastify.post('/', async (request, reply) => {
     const client = await db.connect();
 
     try {
-      const { round_id, quantity, payment_method, customer_whatsapp } = request.body;
+      const {
+        round_id,
+        quantity,
+        payment_method,
+        customer,
+        card_token,
+        installments,
+        card_holder
+      } = request.body;
+
+      // Validações básicas
+      if (!round_id || !quantity || !payment_method || !customer) {
+        return reply.status(400).send(errorResponse('Dados incompletos'));
+      }
 
       await client.query('BEGIN');
 
       // Verificar rodada
       const roundResult = await client.query(
-        'SELECT * FROM rounds WHERE id = $1 AND status = $2',
+        'SELECT * FROM rounds WHERE id = $1 AND status = $2 AND is_selling = true',
         [round_id, 'selling']
       );
 
@@ -39,48 +43,107 @@ export default async function purchasesRoutes(fastify) {
       const round = roundResult.rows[0];
 
       // Verificar limite de cartelas
-      if (round.cards_sold + quantity > round.max_cards) {
+      const availableCards = round.max_cards - round.cards_sold;
+      if (quantity > availableCards) {
         await client.query('ROLLBACK');
-        return reply.status(400).send(errorResponse('Quantidade excede limite disponível'));
+        return reply.status(400).send(errorResponse(`Apenas ${availableCards} cartela(s) disponível(is)`));
       }
 
       const unit_price = round.card_price;
       const total_amount = unit_price * quantity;
 
+      // Buscar ou criar usuário
+      let userId = null;
+      if (customer.email) {
+        const userResult = await client.query(
+          'SELECT id FROM users WHERE email = $1',
+          [customer.email]
+        );
+
+        if (userResult.rows.length > 0) {
+          userId = userResult.rows[0].id;
+        } else {
+          // Criar usuário
+          const newUserResult = await client.query(
+            `INSERT INTO users (name, email, phone, cpf, role, is_active)
+             VALUES ($1, $2, $3, $4, 'user', true)
+             RETURNING id`,
+            [customer.name, customer.email, customer.phone, customer.cpf]
+          );
+          userId = newUserResult.rows[0].id;
+        }
+      }
+
       // Criar compra
       const purchaseResult = await client.query(
-        `INSERT INTO purchases (round_id, quantity, unit_price, total_amount, payment_method, customer_whatsapp, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-         RETURNING *`,
-        [round_id, quantity, unit_price, total_amount, payment_method, customer_whatsapp || null]
+        `INSERT INTO purchases (
+          round_id, user_id, quantity, unit_price, total_amount,
+          payment_method, payment_status, customer_name, customer_email,
+          customer_phone, customer_cpf, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, NOW())
+        RETURNING *`,
+        [
+          round_id, userId, quantity, unit_price, total_amount,
+          payment_method, customer.name, customer.email,
+          customer.phone, customer.cpf
+        ]
       );
 
       const purchase = purchaseResult.rows[0];
 
-      // Gerar dados de pagamento (apenas PIX por enquanto)
-      let paymentData = null;
+      // Gerar cartelas
+      const cards = await generateCards(round_id, purchase.id, userId, quantity, client);
 
-      if (payment_method === 'pix') {
-        paymentData = await generatePix(total_amount, purchase.id);
-
-        // Atualizar compra com dados do PIX
-        await client.query(
-          `UPDATE purchases
-           SET pix_code = $1, pix_qrcode = $2, pix_expiration = $3, pix_transaction_id = $4
-           WHERE id = $5`,
-          [paymentData.code, paymentData.qrcode, paymentData.expiration, paymentData.transaction_id, purchase.id]
-        );
-      }
+      // Atualizar contador de cartelas vendidas
+      await client.query(
+        'UPDATE rounds SET cards_sold = cards_sold + $1 WHERE id = $2',
+        [quantity, round_id]
+      );
 
       await client.query('COMMIT');
 
-      return reply.status(201).send(successResponse({
-        purchase_id: purchase.id,
-        total_amount,
-        payment_method,
-        payment_data: paymentData,
-        message: 'Compra criada. Aguardando pagamento.'
-      }));
+      // Processar pagamento
+      let paymentData;
+
+      try {
+        if (payment_method === 'pix') {
+          paymentData = await createPixPayment({
+            purchase,
+            customer
+          });
+        } else if (payment_method === 'credit_card') {
+          if (!card_token || !card_holder) {
+            return reply.status(400).send(errorResponse('Dados do cartão incompletos'));
+          }
+
+          paymentData = await createCreditCardPayment({
+            purchase,
+            customer,
+            cardToken: card_token,
+            installments: installments || 1,
+            holder: card_holder
+          });
+        } else {
+          return reply.status(400).send(errorResponse('Método de pagamento inválido'));
+        }
+
+        return reply.status(201).send(successResponse({
+          purchase_id: purchase.id,
+          round_id: round.id,
+          round_number: round.number,
+          quantity,
+          total_amount,
+          payment_method,
+          payment_data: paymentData,
+          cards: cards.map(c => ({ code: c.code }))
+        }));
+
+      } catch (paymentError) {
+        console.error('Error processing payment:', paymentError);
+        return reply.status(500).send(errorResponse('Erro ao processar pagamento: ' + paymentError.message));
+      }
+
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Error creating purchase:', error);
@@ -174,6 +237,72 @@ export default async function purchasesRoutes(fastify) {
     } catch (error) {
       console.error('Error cancelling purchase:', error);
       return reply.status(500).send(errorResponse('Erro ao cancelar compra'));
+    }
+  });
+
+  // GET /purchases/:id/status (público - verificar status do pagamento)
+  fastify.get('/:id/status', async (request, reply) => {
+    try {
+      const { id } = request.params;
+
+      const status = await checkPaymentStatus(id);
+
+      return reply.send(successResponse(status));
+    } catch (error) {
+      console.error('Error checking payment status:', error);
+      return reply.status(500).send(errorResponse('Erro ao verificar status do pagamento'));
+    }
+  });
+
+  // POST /purchases/:id/refund (admin only - reembolsar compra)
+  fastify.post('/:id/refund', { preHandler: authAdmin }, async (request, reply) => {
+    try {
+      const { id } = request.params;
+      const { reason } = request.body;
+
+      const result = await refundPayment(id, reason);
+
+      if (!result.success) {
+        return reply.status(400).send(errorResponse('Falha ao reembolsar compra'));
+      }
+
+      // Log de auditoria
+      await logAudit({
+        userId: request.user.id,
+        action: 'refund',
+        entity: 'purchases',
+        entityId: id,
+        newData: { reason },
+        ipAddress: request.ip
+      });
+
+      return reply.send(successResponse({ message: 'Compra reembolsada com sucesso' }));
+    } catch (error) {
+      console.error('Error refunding purchase:', error);
+      return reply.status(500).send(errorResponse('Erro ao reembolsar compra: ' + error.message));
+    }
+  });
+
+  // POST /purchases/webhook/:gateway (público - webhook de pagamento)
+  fastify.post('/webhook/:gateway', async (request, reply) => {
+    try {
+      const { gateway } = request.params;
+      const webhookData = request.body;
+
+      console.log(`Received webhook from ${gateway}:`, JSON.stringify(webhookData));
+
+      const result = await handlePaymentWebhook(gateway, webhookData);
+
+      if (!result.success) {
+        console.error('Webhook processing failed:', result);
+      }
+
+      // Sempre retornar 200 para o gateway
+      return reply.status(200).send({ received: true });
+    } catch (error) {
+      console.error('Error processing webhook:', error);
+      // Sempre retornar 200 para evitar reenvios do gateway
+      return reply.status(200).send({ received: true, error: error.message });
     }
   });
 }

@@ -17,14 +17,22 @@ export async function createNextRound(type = 'regular') {
   try {
     await client.query('BEGIN');
 
-    // Buscar configurações
+    // Buscar configurações de rodada via settings
+    const roundConfigResult = await client.query(
+      "SELECT value FROM settings WHERE key = 'round_config'"
+    );
+
+    const roundConfig = roundConfigResult.rows[0]?.value || {
+      regular: { selling_minutes: 7, closed_minutes: 3 },
+      special: { selling_minutes: 7, closed_minutes: 3 }
+    };
+
+    const config = type === 'regular' ? roundConfig.regular : roundConfig.special;
+
+    // Buscar preço da cartela
     const cardPrice = type === 'regular'
       ? await getSetting('card_price_regular')
       : await getSetting('card_price_special');
-
-    const duration = type === 'regular'
-      ? await getSetting('round_duration_regular')
-      : await getSetting('round_duration_special');
 
     const maxCards = await getSetting('max_cards_per_round');
 
@@ -40,21 +48,22 @@ export async function createNextRound(type = 'regular') {
     // Calcular horários
     const now = new Date();
     const startsAt = addMinutes(now, 1); // Começa em 1 minuto
-    const endsAt = addMinutes(startsAt, duration);
+    const sellingEndsAt = addMinutes(startsAt, config.selling_minutes); // Venda termina em 7 min
+    const endsAt = addMinutes(sellingEndsAt, config.closed_minutes); // Rodada fecha completamente em +3 min
 
     // Criar rodada
     const result = await client.query(
-      `INSERT INTO rounds (number, type, status, card_price, max_cards, starts_at, ends_at)
-       VALUES ($1, $2, 'scheduled', $3, $4, $5, $6)
+      `INSERT INTO rounds (number, type, status, card_price, max_cards, starts_at, selling_ends_at, ends_at, is_selling)
+       VALUES ($1, $2, 'scheduled', $3, $4, $5, $6, $7, false)
        RETURNING *`,
-      [nextNumber, type, cardPrice, maxCards, startsAt, endsAt]
+      [nextNumber, type, cardPrice, maxCards, startsAt, sellingEndsAt, endsAt]
     );
 
     await client.query('COMMIT');
 
     const round = result.rows[0];
 
-    console.log(`✓ Round #${round.number} created (${type})`);
+    console.log(`✓ Round #${round.number} created (${type}) - Selling: ${config.selling_minutes}min, Closed: ${config.closed_minutes}min`);
 
     // Publicar no Redis
     await redis.publish('rounds:new', JSON.stringify(round));
@@ -77,7 +86,7 @@ export async function createNextRound(type = 'regular') {
 export async function startRoundSelling(roundId) {
   try {
     await db.query(
-      `UPDATE rounds SET status = 'selling' WHERE id = $1 AND status = 'scheduled'`,
+      `UPDATE rounds SET status = 'selling', is_selling = true WHERE id = $1 AND status = 'scheduled'`,
       [roundId]
     );
 
@@ -86,12 +95,41 @@ export async function startRoundSelling(roundId) {
     // Publicar no Redis
     await redis.publish(`round:${roundId}:status`, JSON.stringify({
       status: 'selling',
+      is_selling: true,
       timestamp: new Date()
     }));
 
     return true;
   } catch (error) {
     console.error('Error starting round selling:', error);
+    return false;
+  }
+}
+
+/**
+ * Fecha venda de uma rodada (período de 3 minutos antes do sorteio)
+ * @param {number} roundId - ID da rodada
+ * @returns {Promise<boolean>} Sucesso
+ */
+export async function closeRoundSelling(roundId) {
+  try {
+    await db.query(
+      `UPDATE rounds SET is_selling = false WHERE id = $1 AND status = 'selling' AND is_selling = true`,
+      [roundId]
+    );
+
+    console.log(`✓ Round #${roundId} selling closed (waiting period)`);
+
+    // Publicar no Redis
+    await redis.publish(`round:${roundId}:status`, JSON.stringify({
+      status: 'selling',
+      is_selling: false,
+      timestamp: new Date()
+    }));
+
+    return true;
+  } catch (error) {
+    console.error('Error closing round selling:', error);
     return false;
   }
 }
@@ -314,20 +352,58 @@ export async function updateRoundsStatus() {
     const now = new Date();
 
     // Iniciar venda das rodadas agendadas
-    await db.query(
+    const startedRounds = await db.query(
       `UPDATE rounds
-       SET status = 'selling'
-       WHERE status = 'scheduled' AND starts_at <= $1`,
+       SET status = 'selling', is_selling = true
+       WHERE status = 'scheduled' AND starts_at <= $1
+       RETURNING id, number`,
       [now]
     );
 
-    // Iniciar sorteio das rodadas que passaram do horário
-    await db.query(
+    for (const round of startedRounds.rows) {
+      console.log(`✓ Round #${round.number} selling started (auto)`);
+      await redis.publish(`round:${round.id}:status`, JSON.stringify({
+        status: 'selling',
+        is_selling: true,
+        timestamp: new Date()
+      }));
+    }
+
+    // Fechar venda das rodadas que atingiram selling_ends_at
+    const closedSellingRounds = await db.query(
       `UPDATE rounds
-       SET status = 'drawing', drawing_started_at = NOW()
-       WHERE status = 'selling' AND ends_at <= $1`,
+       SET is_selling = false
+       WHERE status = 'selling' AND is_selling = true AND selling_ends_at <= $1
+       RETURNING id, number`,
       [now]
     );
+
+    for (const round of closedSellingRounds.rows) {
+      console.log(`✓ Round #${round.number} selling closed (auto) - waiting period`);
+      await redis.publish(`round:${round.id}:status`, JSON.stringify({
+        status: 'selling',
+        is_selling: false,
+        timestamp: new Date()
+      }));
+    }
+
+    // Iniciar sorteio das rodadas que passaram do horário final (ends_at)
+    const drawingRounds = await db.query(
+      `UPDATE rounds
+       SET status = 'drawing', drawing_started_at = NOW()
+       WHERE status = 'selling' AND ends_at <= $1
+       RETURNING id, number`,
+      [now]
+    );
+
+    for (const round of drawingRounds.rows) {
+      console.log(`✓ Round #${round.number} drawing started (auto)`);
+      await redis.publish(`round:${round.id}:status`, JSON.stringify({
+        status: 'drawing',
+        timestamp: new Date()
+      }));
+    }
+
   } catch (error) {
     console.error('Error updating rounds status:', error);
   }
