@@ -9,9 +9,13 @@ export default async function establishmentsRoutes(fastify) {
   fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
-        `SELECT e.*, u.name, u.email, u.whatsapp, m.code as manager_code
+        `SELECT e.*,
+                COALESCE(u.name, '') as name,
+                COALESCE(u.email, '') as email,
+                COALESCE(u.whatsapp, '') as whatsapp,
+                m.code as manager_code
          FROM establishments e
-         JOIN users u ON e.user_id = u.id
+         LEFT JOIN users u ON e.user_id = u.id
          LEFT JOIN managers m ON e.manager_id = m.id
          ORDER BY e.created_at DESC`
       );

@@ -39,9 +39,10 @@ export default async function posRoutes(fastify) {
       const { terminal_id, api_key } = request.body;
 
       const result = await db.query(
-        `SELECT pt.*, e.name as establishment_name
+        `SELECT pt.*,
+                COALESCE(e.name, '') as establishment_name
          FROM pos_terminals pt
-         JOIN establishments e ON pt.establishment_id = e.id
+         LEFT JOIN establishments e ON pt.establishment_id = e.id
          WHERE pt.terminal_id = $1 AND pt.is_active = true`,
         [terminal_id]
       );

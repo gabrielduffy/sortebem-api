@@ -26,9 +26,11 @@ export default async function withdrawalsRoutes(fastify) {
   fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
-        `SELECT w.*, u.name as user_name, u.email
+        `SELECT w.*,
+                COALESCE(u.name, '') as user_name,
+                COALESCE(u.email, '') as email
          FROM withdrawals w
-         JOIN users u ON w.user_id = u.id
+         LEFT JOIN users u ON w.user_id = u.id
          ORDER BY w.created_at DESC
          LIMIT 100`
       );

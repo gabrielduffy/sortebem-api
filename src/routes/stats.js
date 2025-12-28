@@ -79,7 +79,7 @@ export default async function statsRoutes(fastify) {
           w.prize_amount,
           w.created_at
          FROM winners w
-         JOIN rounds r ON w.round_id = r.id
+         LEFT JOIN rounds r ON w.round_id = r.id
          WHERE r.status = 'finished'
          ORDER BY w.created_at DESC
          LIMIT 10`

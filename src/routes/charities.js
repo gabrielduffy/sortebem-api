@@ -23,7 +23,7 @@ export default async function charitiesRoutes(fastify) {
 
       const result = await db.query(
         `SELECT c.* FROM charities c
-         JOIN charity_monthly cm ON c.id = cm.charity_id
+         LEFT JOIN charity_monthly cm ON c.id = cm.charity_id
          WHERE cm.month = $1 AND cm.year = $2`,
         [month, year]
       );

@@ -15,15 +15,17 @@ export async function sendPurchaseCards(purchaseId) {
     const result = await db.query(
       `SELECT
         p.id, p.user_id, p.round_id,
-        u.name as user_name, u.email, u.phone,
+        COALESCE(u.name, p.customer_name, '') as user_name,
+        COALESCE(u.email, p.customer_email, '') as email,
+        COALESCE(u.phone, p.customer_phone, '') as phone,
         r.number as round_number, r.type as round_type, r.starts_at, r.id as round_id,
         array_agg(c.code) as card_codes
        FROM purchases p
-       JOIN users u ON p.user_id = u.id
-       JOIN rounds r ON p.round_id = r.id
-       JOIN cards c ON c.purchase_id = p.id
+       LEFT JOIN users u ON p.user_id = u.id
+       LEFT JOIN rounds r ON p.round_id = r.id
+       LEFT JOIN cards c ON c.purchase_id = p.id
        WHERE p.id = $1
-       GROUP BY p.id, u.name, u.email, u.phone, r.number, r.type, r.starts_at, r.id`,
+       GROUP BY p.id, u.name, u.email, u.phone, p.customer_name, p.customer_email, p.customer_phone, r.number, r.type, r.starts_at, r.id`,
       [purchaseId]
     );
 
