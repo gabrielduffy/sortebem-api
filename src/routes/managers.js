@@ -6,7 +6,7 @@ import { successResponse, errorResponse, logAudit } from '../utils/helpers.js';
 
 export default async function managersRoutes(fastify) {
   // GET /managers (admin only)
-  fastify.get('/managers', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT m.*, u.name, u.email, u.whatsapp, u.is_active as user_active
@@ -22,7 +22,7 @@ export default async function managersRoutes(fastify) {
   });
 
   // GET /managers/:id (admin only)
-  fastify.get('/managers/:id', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/:id', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
       const result = await db.query(
@@ -45,7 +45,7 @@ export default async function managersRoutes(fastify) {
   });
 
   // POST /managers (admin only)
-  fastify.post('/managers', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.post('/', { preHandler: authAdmin }, async (request, reply) => {
     const client = await db.connect();
     try {
       const { name, email, whatsapp, password, cpf, commission_rate } = request.body;
@@ -102,7 +102,7 @@ export default async function managersRoutes(fastify) {
   });
 
   // GET /managers/:id/establishments (admin only)
-  fastify.get('/managers/:id/establishments', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/:id/establishments', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -123,7 +123,7 @@ export default async function managersRoutes(fastify) {
   });
 
   // PUT /managers/:id/kyc (admin only)
-  fastify.put('/managers/:id/kyc', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.put('/:id/kyc', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
       const { kyc_status } = request.body;

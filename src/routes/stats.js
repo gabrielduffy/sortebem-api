@@ -4,7 +4,7 @@ import { successResponse, errorResponse } from '../utils/helpers.js';
 
 export default async function statsRoutes(fastify) {
   // GET /stats/admin (admin only)
-  fastify.get('/stats/admin', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/admin', { preHandler: authAdmin }, async (request, reply) => {
     try {
       // Total de vendas
       const salesResult = await db.query(

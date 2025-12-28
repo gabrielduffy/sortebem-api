@@ -5,7 +5,7 @@ import { successResponse, errorResponse, logAudit } from '../utils/helpers.js';
 
 export default async function usersRoutes(fastify) {
   // GET /users (admin only)
-  fastify.get('/users', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
         'SELECT id, name, email, whatsapp, role, is_active, created_at FROM users ORDER BY created_at DESC'
@@ -19,7 +19,7 @@ export default async function usersRoutes(fastify) {
   });
 
   // GET /users/:id (admin only)
-  fastify.get('/users/:id', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/:id', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -40,7 +40,7 @@ export default async function usersRoutes(fastify) {
   });
 
   // PUT /users/:id (admin only)
-  fastify.put('/users/:id', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.put('/:id', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
       const { name, email, whatsapp, role, is_active, password } = request.body;
@@ -85,7 +85,7 @@ export default async function usersRoutes(fastify) {
   });
 
   // DELETE /users/:id (admin only - soft delete)
-  fastify.delete('/users/:id', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.delete('/:id', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 

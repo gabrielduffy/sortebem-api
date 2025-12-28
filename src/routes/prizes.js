@@ -4,7 +4,7 @@ import { successResponse, errorResponse } from '../utils/helpers.js';
 
 export default async function prizesRoutes(fastify) {
   // GET /prizes/check/:cardCode (público)
-  fastify.get('/prizes/check/:cardCode', async (request, reply) => {
+  fastify.get('/check/:cardCode', async (request, reply) => {
     try {
       const { cardCode } = request.params;
 
@@ -29,7 +29,7 @@ export default async function prizesRoutes(fastify) {
   });
 
   // POST /prizes/claim (público - resgatar prêmio)
-  fastify.post('/prizes/claim', async (request, reply) => {
+  fastify.post('/claim', async (request, reply) => {
     try {
       const { card_code, pix_key } = request.body;
 
@@ -58,7 +58,7 @@ export default async function prizesRoutes(fastify) {
   });
 
   // GET /prizes/history (admin only)
-  fastify.get('/prizes/history', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/history', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT w.*, c.code as card_code, r.number as round_number

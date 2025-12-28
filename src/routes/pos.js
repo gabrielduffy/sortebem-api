@@ -7,7 +7,7 @@ import { generateCards } from '../services/cardGenerator.js';
 
 export default async function posRoutes(fastify) {
   // POST /pos/terminals (admin/establishment - criar terminal)
-  fastify.post('/pos/terminals', { preHandler: authEstablishment }, async (request, reply) => {
+  fastify.post('/terminals', { preHandler: authEstablishment }, async (request, reply) => {
     try {
       const { establishment_id, name } = request.body;
 
@@ -34,7 +34,7 @@ export default async function posRoutes(fastify) {
   });
 
   // POST /pos/auth (autenticar terminal)
-  fastify.post('/pos/auth', async (request, reply) => {
+  fastify.post('/auth', async (request, reply) => {
     try {
       const { terminal_id, api_key } = request.body;
 
@@ -73,7 +73,7 @@ export default async function posRoutes(fastify) {
   });
 
   // GET /pos/round/current (autenticado - rodada atual)
-  fastify.get('/pos/round/current', { preHandler: authPOS }, async (request, reply) => {
+  fastify.get('/round/current', { preHandler: authPOS }, async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT * FROM rounds WHERE status = 'selling' ORDER BY starts_at ASC LIMIT 1`
@@ -87,7 +87,7 @@ export default async function posRoutes(fastify) {
   });
 
   // POST /pos/sale (criar venda POS)
-  fastify.post('/pos/sale', { preHandler: authPOS }, async (request, reply) => {
+  fastify.post('/sale', { preHandler: authPOS }, async (request, reply) => {
     const client = await db.connect();
     try {
       const { round_id, quantity, payment_method } = request.body;

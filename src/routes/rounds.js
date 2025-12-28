@@ -10,8 +10,8 @@ import {
 import { successResponse, errorResponse, createPaginationMeta, calculateOffset } from '../utils/helpers.js';
 
 export default async function roundsRoutes(fastify) {
-  // GET /rounds (público - listar rodadas ativas e próximas)
-  fastify.get('/rounds', async (request, reply) => {
+  // GET / (público - listar rodadas ativas e próximas)
+  fastify.get('/', async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT * FROM rounds
@@ -27,8 +27,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // GET /rounds/current (público - rodada atual vendendo)
-  fastify.get('/rounds/current', async (request, reply) => {
+  // GET /current (público - rodada atual vendendo)
+  fastify.get('/current', async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT * FROM rounds
@@ -48,8 +48,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // GET /rounds/live (público - rodada ao vivo sorteando)
-  fastify.get('/rounds/live', async (request, reply) => {
+  // GET /live (público - rodada ao vivo sorteando)
+  fastify.get('/live', async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT * FROM rounds
@@ -69,8 +69,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // GET /rounds/:id (público)
-  fastify.get('/rounds/:id', async (request, reply) => {
+  // GET /:id (público)
+  fastify.get('/:id', async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -87,8 +87,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // GET /rounds/:id/numbers (público - números já sorteados)
-  fastify.get('/rounds/:id/numbers', async (request, reply) => {
+  // GET /:id/numbers (público - números já sorteados)
+  fastify.get('/:id/numbers', async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -106,8 +106,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // GET /rounds/:id/cards (admin only)
-  fastify.get('/rounds/:id/cards', { preHandler: authAdmin }, async (request, reply) => {
+  // GET /:id/cards (admin only)
+  fastify.get('/:id/cards', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
       const { page = 1, limit = 50 } = request.query;
@@ -139,8 +139,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // POST /rounds (admin only - criar rodada manual)
-  fastify.post('/rounds', { preHandler: authAdmin }, async (request, reply) => {
+  // POST / (admin only - criar rodada manual)
+  fastify.post('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { type = 'regular' } = request.body;
 
@@ -153,8 +153,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // POST /rounds/:id/start-drawing (admin only)
-  fastify.post('/rounds/:id/start-drawing', { preHandler: authAdmin }, async (request, reply) => {
+  // POST /:id/start-drawing (admin only)
+  fastify.post('/:id/start-drawing', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -171,8 +171,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // POST /rounds/:id/draw-number (admin only)
-  fastify.post('/rounds/:id/draw-number', { preHandler: authAdmin }, async (request, reply) => {
+  // POST /:id/draw-number (admin only)
+  fastify.post('/:id/draw-number', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -185,8 +185,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // POST /rounds/:id/finish (admin only)
-  fastify.post('/rounds/:id/finish', { preHandler: authAdmin }, async (request, reply) => {
+  // POST /:id/finish (admin only)
+  fastify.post('/:id/finish', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -203,8 +203,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // POST /rounds/:id/cancel (admin only)
-  fastify.post('/rounds/:id/cancel', { preHandler: authAdmin }, async (request, reply) => {
+  // POST /:id/cancel (admin only)
+  fastify.post('/:id/cancel', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -221,8 +221,8 @@ export default async function roundsRoutes(fastify) {
     }
   });
 
-  // GET /rounds/history (público - histórico)
-  fastify.get('/rounds/history', async (request, reply) => {
+  // GET /history (público - histórico)
+  fastify.get('/history', async (request, reply) => {
     try {
       const { page = 1, limit = 20 } = request.query;
       const offset = calculateOffset(page, limit);

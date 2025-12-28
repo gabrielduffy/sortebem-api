@@ -3,8 +3,8 @@ import { authAdmin } from '../middleware/auth.js';
 import { getSetting, setSetting, logAudit, successResponse, errorResponse } from '../utils/helpers.js';
 
 export default async function settingsRoutes(fastify) {
-  // GET /settings (admin only)
-  fastify.get('/settings', { preHandler: authAdmin }, async (request, reply) => {
+  // GET / (admin only)
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query('SELECT key, value FROM settings ORDER BY key');
 
@@ -20,8 +20,8 @@ export default async function settingsRoutes(fastify) {
     }
   });
 
-  // PUT /settings (admin only)
-  fastify.put('/settings', { preHandler: authAdmin }, async (request, reply) => {
+  // PUT / (admin only)
+  fastify.put('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const updates = request.body;
 
@@ -57,8 +57,8 @@ export default async function settingsRoutes(fastify) {
     }
   });
 
-  // GET /settings/public (público - apenas configurações públicas)
-  fastify.get('/settings/public', async (request, reply) => {
+  // GET /public (público - apenas configurações públicas)
+  fastify.get('/public', async (request, reply) => {
     try {
       const publicKeys = [
         'card_price_regular',

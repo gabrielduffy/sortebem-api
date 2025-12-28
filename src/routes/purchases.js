@@ -7,7 +7,7 @@ import { successResponse, errorResponse, logAudit } from '../utils/helpers.js';
 
 export default async function purchasesRoutes(fastify) {
   // POST /purchases (público - criar compra)
-  fastify.post('/purchases', {
+  fastify.post('/', {
     preHandler: validate({
       required: ['round_id', 'quantity', 'payment_method'],
       fields: {
@@ -91,7 +91,7 @@ export default async function purchasesRoutes(fastify) {
   });
 
   // GET /purchases/:id (público - status da compra)
-  fastify.get('/purchases/:id', async (request, reply) => {
+  fastify.get('/:id', async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -122,7 +122,7 @@ export default async function purchasesRoutes(fastify) {
   });
 
   // GET /purchases/:id/cards (público - listar cartelas após pagamento)
-  fastify.get('/purchases/:id/cards', async (request, reply) => {
+  fastify.get('/:id/cards', async (request, reply) => {
     try {
       const { id } = request.params;
 
@@ -154,7 +154,7 @@ export default async function purchasesRoutes(fastify) {
   });
 
   // POST /purchases/:id/cancel (público - cancelar compra pendente)
-  fastify.post('/purchases/:id/cancel', async (request, reply) => {
+  fastify.post('/:id/cancel', async (request, reply) => {
     try {
       const { id } = request.params;
 

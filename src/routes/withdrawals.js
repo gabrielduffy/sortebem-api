@@ -4,7 +4,7 @@ import { successResponse, errorResponse } from '../utils/helpers.js';
 
 export default async function withdrawalsRoutes(fastify) {
   // POST /withdrawals (usuário logado)
-  fastify.post('/withdrawals', { preHandler: authRequired }, async (request, reply) => {
+  fastify.post('/', { preHandler: authRequired }, async (request, reply) => {
     try {
       const { amount, pix_key } = request.body;
 
@@ -23,7 +23,7 @@ export default async function withdrawalsRoutes(fastify) {
   });
 
   // GET /withdrawals (admin only)
-  fastify.get('/withdrawals', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT w.*, u.name as user_name, u.email
@@ -41,7 +41,7 @@ export default async function withdrawalsRoutes(fastify) {
   });
 
   // PUT /withdrawals/:id/process (admin only)
-  fastify.put('/withdrawals/:id/process', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.put('/:id/process', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
       const { status } = request.body;

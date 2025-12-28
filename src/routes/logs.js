@@ -4,7 +4,7 @@ import { successResponse, errorResponse, createPaginationMeta, calculateOffset }
 
 export default async function logsRoutes(fastify) {
   // GET /logs (admin only)
-  fastify.get('/logs', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { page = 1, limit = 50, entity, action, user_id } = request.query;
       const offset = calculateOffset(page, limit);

@@ -5,7 +5,7 @@ import { successResponse, errorResponse } from '../utils/helpers.js';
 
 export default async function whatsappRoutes(fastify) {
   // GET /whatsapp/config (admin only)
-  fastify.get('/whatsapp/config', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/config', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query('SELECT * FROM whatsapp_config WHERE id = 1');
       return reply.send(successResponse(result.rows[0] || null));
@@ -16,7 +16,7 @@ export default async function whatsappRoutes(fastify) {
   });
 
   // PUT /whatsapp/config (admin only)
-  fastify.put('/whatsapp/config', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.put('/config', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { api_url, api_key, sender_number, message_template, is_active } = request.body;
 
@@ -37,7 +37,7 @@ export default async function whatsappRoutes(fastify) {
   });
 
   // POST /whatsapp/test (admin only)
-  fastify.post('/whatsapp/test', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.post('/test', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { phone } = request.body;
 
@@ -55,7 +55,7 @@ export default async function whatsappRoutes(fastify) {
   });
 
   // GET /whatsapp/logs (admin only)
-  fastify.get('/whatsapp/logs', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/logs', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
         'SELECT * FROM whatsapp_logs ORDER BY created_at DESC LIMIT 100'
