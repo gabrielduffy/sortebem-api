@@ -38,6 +38,14 @@ export function generateEstablishmentCode() {
  * Gera código de terminal POS no formato POS-XXXXXXXX
  * @returns {string} Código único do terminal
  */
+/**
+ * Gera código de transação no formato TXN-XXXXXXXXXXXX
+ */
+export function generateTransactionCode() {
+  const gen = customAlphabet(alphabet, 12);
+  return `TXN-${gen()}`;
+}
+
 export function generatePOSTerminalId() {
   return `POS-${nanoid()}`;
 }
