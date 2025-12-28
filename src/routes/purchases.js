@@ -22,10 +22,41 @@ export default async function purchasesRoutes(fastify) {
         card_holder
       } = request.body;
 
-      // Validações básicas
-      if (!round_id || !quantity || !payment_method || !customer) {
-        return reply.status(400).send(errorResponse('Dados incompletos'));
+      console.log('📝 Criando purchase com dados:', {
+        round_id,
+        quantity,
+        payment_method,
+        customer: customer || 'não fornecido',
+        card_token: card_token ? '***' : undefined,
+        installments
+      });
+
+      // Validações básicas - customer é OPCIONAL
+      if (!round_id || !quantity || !payment_method) {
+        console.log('❌ Validação falhou: dados incompletos');
+        return reply.status(400).send(errorResponse('Campos obrigatórios: round_id, quantity, payment_method'));
       }
+
+      // Validar tipos
+      if (typeof round_id !== 'number' || typeof quantity !== 'number') {
+        console.log('❌ Validação falhou: tipos inválidos');
+        return reply.status(400).send(errorResponse('round_id e quantity devem ser números'));
+      }
+
+      if (quantity < 1 || quantity > 100) {
+        console.log('❌ Validação falhou: quantidade inválida');
+        return reply.status(400).send(errorResponse('Quantidade deve ser entre 1 e 100'));
+      }
+
+      // Limpar dados do customer (tratar undefined, null, strings vazias)
+      const customerData = {
+        name: customer?.name || null,
+        email: customer?.email || null,
+        phone: customer?.phone || null,
+        cpf: customer?.cpf || null
+      };
+
+      console.log('✅ Customer data limpo:', customerData);
 
       await client.query('BEGIN');
 
@@ -37,40 +68,46 @@ export default async function purchasesRoutes(fastify) {
 
       if (roundResult.rows.length === 0) {
         await client.query('ROLLBACK');
+        console.log('❌ Rodada não disponível:', round_id);
         return reply.status(400).send(errorResponse('Rodada não disponível para venda'));
       }
 
       const round = roundResult.rows[0];
+      console.log('✅ Rodada encontrada:', { id: round.id, number: round.number, cards_sold: round.cards_sold });
 
       // Verificar limite de cartelas
       const availableCards = round.max_cards - round.cards_sold;
       if (quantity > availableCards) {
         await client.query('ROLLBACK');
+        console.log('❌ Quantidade excede disponível:', { requested: quantity, available: availableCards });
         return reply.status(400).send(errorResponse(`Apenas ${availableCards} cartela(s) disponível(is)`));
       }
 
       const unit_price = round.card_price;
       const total_amount = unit_price * quantity;
+      console.log('💰 Valores calculados:', { unit_price, quantity, total_amount });
 
-      // Buscar ou criar usuário
+      // Buscar ou criar usuário (apenas se email foi fornecido)
       let userId = null;
-      if (customer.email) {
+      if (customerData.email) {
         const userResult = await client.query(
           'SELECT id FROM users WHERE email = $1',
-          [customer.email]
+          [customerData.email]
         );
 
         if (userResult.rows.length > 0) {
           userId = userResult.rows[0].id;
-        } else {
-          // Criar usuário
+          console.log('✅ Usuário existente encontrado:', userId);
+        } else if (customerData.name) {
+          // Criar usuário apenas se tiver nome e email
           const newUserResult = await client.query(
             `INSERT INTO users (name, email, phone, cpf, role, is_active)
              VALUES ($1, $2, $3, $4, 'user', true)
              RETURNING id`,
-            [customer.name, customer.email, customer.phone, customer.cpf]
+            [customerData.name, customerData.email, customerData.phone, customerData.cpf]
           );
           userId = newUserResult.rows[0].id;
+          console.log('✅ Novo usuário criado:', userId);
         }
       }
 
@@ -85,15 +122,17 @@ export default async function purchasesRoutes(fastify) {
         RETURNING *`,
         [
           round_id, userId, quantity, unit_price, total_amount,
-          payment_method, customer.name, customer.email,
-          customer.phone, customer.cpf
+          payment_method, customerData.name, customerData.email,
+          customerData.phone, customerData.cpf
         ]
       );
 
       const purchase = purchaseResult.rows[0];
+      console.log('✅ Purchase criada:', { id: purchase.id, total_amount: purchase.total_amount });
 
       // Gerar cartelas
       const cards = await generateCards(round_id, purchase.id, userId, quantity, client);
+      console.log('✅ Cartelas geradas:', cards.length);
 
       // Atualizar contador de cartelas vendidas
       await client.query(
@@ -102,54 +141,74 @@ export default async function purchasesRoutes(fastify) {
       );
 
       await client.query('COMMIT');
+      console.log('✅ Transação commitada');
 
       // Processar pagamento
       let paymentData;
 
       try {
         if (payment_method === 'pix') {
+          console.log('🔄 Criando pagamento PIX...');
           paymentData = await createPixPayment({
             purchase,
-            customer
+            customer: customerData
           });
+          console.log('✅ PIX criado:', { id: paymentData.id });
         } else if (payment_method === 'credit_card') {
           if (!card_token || !card_holder) {
+            console.log('❌ Dados do cartão incompletos');
             return reply.status(400).send(errorResponse('Dados do cartão incompletos'));
           }
 
+          console.log('🔄 Criando pagamento com cartão...');
           paymentData = await createCreditCardPayment({
             purchase,
-            customer,
+            customer: customerData,
             cardToken: card_token,
             installments: installments || 1,
             holder: card_holder
           });
+          console.log('✅ Pagamento cartão criado:', { id: paymentData.id });
         } else {
+          console.log('❌ Método de pagamento inválido:', payment_method);
           return reply.status(400).send(errorResponse('Método de pagamento inválido'));
         }
 
+        console.log('🎉 Purchase completa com sucesso:', purchase.id);
+
         return reply.status(201).send(successResponse({
+          id: purchase.id,
           purchase_id: purchase.id,
           round_id: round.id,
           round_number: round.number,
           quantity,
           total_amount,
           payment_method,
+          pix: payment_method === 'pix' ? {
+            code: paymentData.pixCopyPaste,
+            qrcode: paymentData.pixQrCode
+          } : undefined,
           payment_data: paymentData,
           cards: cards.map(c => ({ code: c.code }))
         }));
 
       } catch (paymentError) {
-        console.error('Error processing payment:', paymentError);
-        return reply.status(500).send(errorResponse('Erro ao processar pagamento: ' + paymentError.message));
+        console.error('❌ ERRO ao processar pagamento:', paymentError);
+        console.error('Stack:', paymentError.stack);
+        return reply.status(400).send(errorResponse('Erro ao processar pagamento: ' + paymentError.message));
       }
 
     } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Error creating purchase:', error);
-      return reply.status(500).send(errorResponse('Erro ao criar compra'));
+      if (client) {
+        await client.query('ROLLBACK');
+      }
+      console.error('❌ ERRO CRÍTICO ao criar purchase:', error);
+      console.error('Stack:', error.stack);
+      return reply.status(500).send(errorResponse('Erro interno ao criar compra. Por favor, tente novamente.'));
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   });
 

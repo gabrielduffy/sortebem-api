@@ -58,39 +58,43 @@ export async function createPixPayment(params) {
   const gateway = await selectGateway('pix');
   const transactionCode = generateTransactionCode();
 
+  console.log('💳 createPixPayment chamado:', { purchaseId: purchase.id, gateway, customer });
+
   try {
     let chargeData;
 
+    // Preparar dados do customer com valores padrão
+    const customerData = {
+      cpfCnpj: customer?.cpf || null,
+      name: customer?.name || 'Cliente SORTEBEM',
+      email: customer?.email || `cliente-${purchase.id}@sortebem.com.br`,
+      phone: customer?.phone || null
+    };
+
+    console.log('👤 Customer data preparado:', customerData);
+
     if (gateway === 'asaas') {
       // Criar/buscar cliente no Asaas
-      const customerId = await asaasService.getOrCreateCustomer({
-        cpfCnpj: customer.cpf,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone
-      });
+      const customerId = await asaasService.getOrCreateCustomer(customerData);
 
       // Criar cobrança PIX
       chargeData = await asaasService.createPixCharge({
         customer: customerId,
-        value: purchase.totalAmount,
-        description: `SORTEBEM - ${purchase.quantity} cartela(s) - Rodada #${purchase.roundId}`,
+        value: purchase.total_amount,
+        description: `SORTEBEM - ${purchase.quantity} cartela(s) - Rodada #${purchase.round_id}`,
         expirationMinutes: 2
       });
     } else if (gateway === 'pagseguro') {
       // PagSeguro trabalha em centavos
       chargeData = await pagseguroService.createPixCharge({
-        customer: {
-          name: customer.name,
-          email: customer.email,
-          cpfCnpj: customer.cpf,
-          phone: customer.phone
-        },
-        value: Math.round(purchase.totalAmount * 100),
-        description: `SORTEBEM - ${purchase.quantity} cartela(s) - Rodada #${purchase.roundId}`,
+        customer: customerData,
+        value: Math.round(purchase.total_amount * 100),
+        description: `SORTEBEM - ${purchase.quantity} cartela(s) - Rodada #${purchase.round_id}`,
         expirationMinutes: 2
       });
     }
+
+    console.log('✅ Charge criado no gateway:', { id: chargeData.id, gateway });
 
     // Atualizar purchase com dados do gateway
     await db.query(
@@ -112,17 +116,19 @@ export async function createPixPayment(params) {
     );
 
     return {
+      id: chargeData.id,
       transactionCode,
       gateway,
       gatewayTransactionId: chargeData.id,
       pixCopyPaste: chargeData.pixCopyPaste,
       pixQrCode: chargeData.pixQrCode,
       expiresAt: chargeData.expiresAt,
-      value: purchase.totalAmount
+      value: purchase.total_amount
     };
 
   } catch (error) {
-    console.error('Erro ao criar pagamento PIX:', error);
+    console.error('❌ Erro ao criar pagamento PIX:', error);
+    console.error('Stack:', error.stack);
 
     // Registrar erro na purchase
     await db.query(
@@ -147,21 +153,30 @@ export async function createCreditCardPayment(params) {
   const gateway = 'pagseguro'; // Cartão sempre via PagSeguro
   const transactionCode = generateTransactionCode();
 
+  console.log('💳 createCreditCardPayment chamado:', { purchaseId: purchase.id, gateway, customer });
+
   try {
+    // Preparar dados do customer com valores padrão
+    const customerData = {
+      name: customer?.name || holder?.name || 'Cliente SORTEBEM',
+      email: customer?.email || `cliente-${purchase.id}@sortebem.com.br`,
+      cpfCnpj: customer?.cpf || holder?.cpf || null,
+      phone: customer?.phone || null
+    };
+
+    console.log('👤 Customer data preparado:', customerData);
+
     // PagSeguro trabalha em centavos
     const chargeData = await pagseguroService.createCreditCardCharge({
-      customer: {
-        name: customer.name,
-        email: customer.email,
-        cpfCnpj: customer.cpf,
-        phone: customer.phone
-      },
-      value: Math.round(purchase.totalAmount * 100),
-      description: `SORTEBEM - ${purchase.quantity} cartela(s) - Rodada #${purchase.roundId}`,
+      customer: customerData,
+      value: Math.round(purchase.total_amount * 100),
+      description: `SORTEBEM - ${purchase.quantity} cartela(s) - Rodada #${purchase.round_id}`,
       cardToken,
       installments,
       holder
     });
+
+    console.log('✅ Charge criado no gateway:', { id: chargeData.id, status: chargeData.status });
 
     // Atualizar purchase com dados do gateway
     await db.query(
@@ -188,16 +203,18 @@ export async function createCreditCardPayment(params) {
     }
 
     return {
+      id: chargeData.id,
       transactionCode,
       gateway,
       gatewayTransactionId: chargeData.id,
       status: chargeData.status,
       installments: chargeData.installments,
-      value: purchase.totalAmount
+      value: purchase.total_amount
     };
 
   } catch (error) {
-    console.error('Erro ao criar pagamento cartão:', error);
+    console.error('❌ Erro ao criar pagamento cartão:', error);
+    console.error('Stack:', error.stack);
 
     await db.query(
       `UPDATE purchases
