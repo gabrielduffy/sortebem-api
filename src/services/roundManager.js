@@ -52,14 +52,14 @@ export async function createNextRound(type = 'regular') {
 
     // Calcular horários
     const now = new Date();
-    const startsAt = addMinutes(now, 1); // Começa em 1 minuto
+    const startsAt = now; // ✅ CORRIGIDO: Começa AGORA (não em 1 minuto)
     const sellingEndsAt = addMinutes(startsAt, config.selling_minutes); // Venda termina em 7 min
     const endsAt = addMinutes(sellingEndsAt, config.closed_minutes); // Rodada fecha completamente em +3 min
 
     // Criar rodada
     const result = await client.query(
       `INSERT INTO rounds (number, type, status, card_price, max_cards, starts_at, selling_ends_at, ends_at, is_selling)
-       VALUES ($1, $2, 'scheduled', $3, $4, $5, $6, $7, false)
+       VALUES ($1, $2, 'selling', $3, $4, $5, $6, $7, true)
        RETURNING *`,
       [nextNumber, type, cardPrice, maxCards, startsAt, sellingEndsAt, endsAt]
     );
@@ -68,7 +68,7 @@ export async function createNextRound(type = 'regular') {
 
     const round = result.rows[0];
 
-    console.log(`✓ Round #${round.number} created (${type}) - Selling: ${config.selling_minutes}min, Closed: ${config.closed_minutes}min`);
+    console.log(`✓ Round #${round.number} created (${type}) - Status: SELLING - Selling: ${config.selling_minutes}min, Closed: ${config.closed_minutes}min`);
 
     // Publicar no Redis
     await redis.publish('rounds:new', JSON.stringify(round));
