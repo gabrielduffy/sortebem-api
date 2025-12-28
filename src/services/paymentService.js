@@ -332,7 +332,7 @@ async function processSuccessfulPayment(purchaseId) {
               e.commission_rate as establishment_commission,
               m.commission_rate as manager_commission
        FROM purchases p
-       JOIN rounds r ON p.round_id = r.id
+       LEFT JOIN rounds r ON p.round_id = r.id
        LEFT JOIN establishments e ON r.establishment_id = e.id
        LEFT JOIN managers m ON r.manager_id = m.id
        WHERE p.id = $1`,

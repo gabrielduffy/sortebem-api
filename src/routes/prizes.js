@@ -9,10 +9,12 @@ export default async function prizesRoutes(fastify) {
       const { cardCode } = request.params;
 
       const result = await db.query(
-        `SELECT w.*, c.code as card_code, r.number as round_number
+        `SELECT w.*,
+                c.code as card_code,
+                r.number as round_number
          FROM winners w
-         JOIN cards c ON w.card_id = c.id
-         JOIN rounds r ON w.round_id = r.id
+         LEFT JOIN cards c ON w.card_id = c.id
+         LEFT JOIN rounds r ON w.round_id = r.id
          WHERE c.code = $1`,
         [cardCode]
       );
@@ -61,10 +63,12 @@ export default async function prizesRoutes(fastify) {
   fastify.get('/history', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
-        `SELECT w.*, c.code as card_code, r.number as round_number
+        `SELECT w.*,
+                c.code as card_code,
+                r.number as round_number
          FROM winners w
-         JOIN cards c ON w.card_id = c.id
-         JOIN rounds r ON w.round_id = r.id
+         LEFT JOIN cards c ON w.card_id = c.id
+         LEFT JOIN rounds r ON w.round_id = r.id
          ORDER BY w.created_at DESC
          LIMIT 100`
       );

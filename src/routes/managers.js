@@ -9,9 +9,13 @@ export default async function managersRoutes(fastify) {
   fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
-        `SELECT m.*, u.name, u.email, u.whatsapp, u.is_active as user_active
+        `SELECT m.*,
+                COALESCE(u.name, '') as name,
+                COALESCE(u.email, '') as email,
+                COALESCE(u.whatsapp, '') as whatsapp,
+                u.is_active as user_active
          FROM managers m
-         JOIN users u ON m.user_id = u.id
+         LEFT JOIN users u ON m.user_id = u.id
          ORDER BY m.created_at DESC`
       );
       return reply.send(successResponse(result.rows));
@@ -26,9 +30,12 @@ export default async function managersRoutes(fastify) {
     try {
       const { id } = request.params;
       const result = await db.query(
-        `SELECT m.*, u.name, u.email, u.whatsapp
+        `SELECT m.*,
+                COALESCE(u.name, '') as name,
+                COALESCE(u.email, '') as email,
+                COALESCE(u.whatsapp, '') as whatsapp
          FROM managers m
-         JOIN users u ON m.user_id = u.id
+         LEFT JOIN users u ON m.user_id = u.id
          WHERE m.id = $1`,
         [id]
       );
@@ -107,9 +114,12 @@ export default async function managersRoutes(fastify) {
       const { id } = request.params;
 
       const result = await db.query(
-        `SELECT e.*, u.name as user_name, u.email, u.whatsapp
+        `SELECT e.*,
+                COALESCE(u.name, '') as user_name,
+                COALESCE(u.email, '') as email,
+                COALESCE(u.whatsapp, '') as whatsapp
          FROM establishments e
-         JOIN users u ON e.user_id = u.id
+         LEFT JOIN users u ON e.user_id = u.id
          WHERE e.manager_id = $1
          ORDER BY e.created_at DESC`,
         [id]

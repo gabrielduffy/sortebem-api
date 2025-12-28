@@ -161,7 +161,7 @@ export default async function purchasesRoutes(fastify) {
       const result = await db.query(
         `SELECT p.*, r.number as round_number, r.type as round_type
          FROM purchases p
-         JOIN rounds r ON p.round_id = r.id
+         LEFT JOIN rounds r ON p.round_id = r.id
          WHERE p.id = $1`,
         [id]
       );

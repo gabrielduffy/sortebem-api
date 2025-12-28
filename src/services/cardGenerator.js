@@ -146,8 +146,8 @@ export async function getCardByCode(code) {
     const result = await db.query(
       `SELECT c.*, p.payment_status, r.status as round_status
        FROM cards c
-       JOIN purchases p ON c.purchase_id = p.id
-       JOIN rounds r ON c.round_id = r.id
+       LEFT JOIN purchases p ON c.purchase_id = p.id
+       LEFT JOIN rounds r ON c.round_id = r.id
        WHERE c.code = $1`,
       [code]
     );
