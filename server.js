@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import pg from "pg";
 import Redis from "ioredis";
 import bcrypt from "bcryptjs";
@@ -26,6 +27,16 @@ if (!BOOTSTRAP_KEY) throw new Error("BOOTSTRAP_KEY missing");
 ========================= */
 const db = new Pool({ connectionString: DATABASE_URL });
 const redis = new Redis(REDIS_URL);
+
+/* =========================
+   CORS
+========================= */
+await app.register(cors, {
+  origin: ["https://sortebem.com.br", "http://localhost:5173", "http://localhost:3000"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "x-bootstrap-key"]
+});
 
 /* =========================
    HELPERS
