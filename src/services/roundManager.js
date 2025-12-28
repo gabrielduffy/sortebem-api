@@ -22,19 +22,24 @@ export async function createNextRound(type = 'regular') {
       "SELECT value FROM settings WHERE key = 'round_config'"
     );
 
-    const roundConfig = roundConfigResult.rows[0]?.value || {
-      regular: { selling_minutes: 7, closed_minutes: 3 },
-      special: { selling_minutes: 7, closed_minutes: 3 }
+    let roundConfig = roundConfigResult.rows[0]?.value || {
+      regular: { selling_minutes: 7, closed_minutes: 3, card_price: 5 },
+      special: { selling_minutes: 57, closed_minutes: 3, card_price: 10 }
     };
+    
+    // Parse se vier como string
+    if (typeof roundConfig === 'string') {
+      roundConfig = JSON.parse(roundConfig);
+    }
 
     const config = type === 'regular' ? roundConfig.regular : roundConfig.special;
 
-    // Buscar preço da cartela
-    const cardPrice = type === 'regular'
+    // Buscar preço da cartela (usa do config ou fallback para settings antigo)
+    const cardPrice = config.card_price || (type === 'regular'
       ? await getSetting('card_price_regular')
-      : await getSetting('card_price_special');
+      : await getSetting('card_price_special'));
 
-    const maxCards = await getSetting('max_cards_per_round');
+    const maxCards = roundConfig.max_cards_per_round || await getSetting('max_cards_per_round') || 10000;
 
     // Buscar último número de rodada
     const lastRoundResult = await client.query(
