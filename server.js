@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db, redis, testConnections } from './src/config/database.js';
 import { startCronJobs } from './src/cron/jobs.js';
+import { runSeedIfDev } from './src/database/seed.js';
 
 // Importar rotas
 import settingsRoutes from './src/routes/settings.js';
@@ -280,6 +281,9 @@ async function start() {
     // Garantir tabela de usuários
     await ensureUsersTable();
 
+    // Executar seed em desenvolvimento
+    await runSeedIfDev();
+
     // Iniciar cron jobs
     startCronJobs();
 
@@ -288,6 +292,7 @@ async function start() {
 
     console.log(`🚀 SORTEBEM API running on port ${PORT}`);
     console.log(`📍 http://localhost:${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   } catch (error) {
     console.error('❌ Error starting server:', error);
     process.exit(1);

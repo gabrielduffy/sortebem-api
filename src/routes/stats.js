@@ -8,13 +8,15 @@ export default async function statsRoutes(fastify) {
     try {
       // Total de vendas
       const salesResult = await db.query(
-        `SELECT COUNT(*) as total_purchases, SUM(total_amount) as total_revenue
+        `SELECT
+          COALESCE(COUNT(*), 0) as total_purchases,
+          COALESCE(SUM(total_amount), 0) as total_revenue
          FROM purchases WHERE payment_status = 'paid'`
       );
 
       // Total de cartelas vendidas
       const cardsResult = await db.query(
-        'SELECT COUNT(*) as total_cards FROM cards WHERE status = $1',
+        'SELECT COALESCE(COUNT(*), 0) as total_cards FROM cards WHERE status = $1',
         ['sold']
       );
 
@@ -28,11 +30,20 @@ export default async function statsRoutes(fastify) {
         `SELECT role, COUNT(*) as count FROM users WHERE is_active = true GROUP BY role`
       );
 
+      // Garantir valores padrão
+      const sales = salesResult.rows[0] || { total_purchases: 0, total_revenue: 0 };
+      const cards = cardsResult.rows[0] || { total_cards: 0 };
+
       return reply.send(successResponse({
-        sales: salesResult.rows[0],
-        cards: cardsResult.rows[0],
-        rounds: roundsResult.rows,
-        users: usersResult.rows
+        sales: {
+          total_purchases: parseInt(sales.total_purchases) || 0,
+          total_revenue: parseFloat(sales.total_revenue) || 0
+        },
+        cards: {
+          total_cards: parseInt(cards.total_cards) || 0
+        },
+        rounds: roundsResult.rows || [],
+        users: usersResult.rows || []
       }));
     } catch (error) {
       console.error('Error fetching admin stats:', error);
