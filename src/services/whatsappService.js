@@ -5,6 +5,61 @@ import { db } from '../config/database.js';
 ========================= */
 
 /**
+ * Envia cartelas de uma compra por WhatsApp
+ * @param {number} purchaseId - ID da compra
+ * @returns {Promise<Object>} Resultado do envio
+ */
+export async function sendPurchaseCards(purchaseId) {
+  try {
+    // Buscar dados da compra, usuário, cartelas e rodada
+    const result = await db.query(
+      `SELECT
+        p.id, p.user_id, p.round_id,
+        u.name as user_name, u.email, u.phone,
+        r.number as round_number, r.type as round_type, r.starts_at, r.id as round_id,
+        array_agg(c.code) as card_codes
+       FROM purchases p
+       JOIN users u ON p.user_id = u.id
+       JOIN rounds r ON p.round_id = r.id
+       JOIN cards c ON c.purchase_id = p.id
+       WHERE p.id = $1
+       GROUP BY p.id, u.name, u.email, u.phone, r.number, r.type, r.starts_at, r.id`,
+      [purchaseId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Compra não encontrada');
+    }
+
+    const purchase = result.rows[0];
+
+    if (!purchase.phone) {
+      console.log('Usuário sem telefone cadastrado');
+      return { success: false, error: 'Telefone não cadastrado' };
+    }
+
+    // Enviar cartelas
+    return await sendCardsViaWhatsApp(
+      purchase.phone,
+      purchase.card_codes,
+      {
+        id: purchase.round_id,
+        number: purchase.round_number,
+        type: purchase.round_type,
+        starts_at: purchase.starts_at
+      }
+    );
+
+  } catch (error) {
+    console.error('Error sending purchase cards:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
  * Envia cartelas por WhatsApp
  * @param {string} phone - Número do WhatsApp
  * @param {string[]} cardCodes - Códigos das cartelas
@@ -13,12 +68,12 @@ import { db } from '../config/database.js';
  */
 export async function sendCardsViaWhatsApp(phone, cardCodes, roundInfo) {
   try {
-    // Buscar configuração do WhatsApp
+    // Buscar configuração do WhatsApp via settings
     const configResult = await db.query(
-      'SELECT * FROM whatsapp_config WHERE id = 1'
+      "SELECT value FROM settings WHERE key = 'whatsapp_config'"
     );
 
-    if (configResult.rows.length === 0 || !configResult.rows[0].is_active) {
+    if (configResult.rows.length === 0 || !configResult.rows[0].value.is_active) {
       console.log('WhatsApp not configured or inactive');
       return {
         success: false,
@@ -26,7 +81,7 @@ export async function sendCardsViaWhatsApp(phone, cardCodes, roundInfo) {
       };
     }
 
-    const config = configResult.rows[0];
+    const config = configResult.rows[0].value;
 
     // Montar mensagem
     const message = buildCardMessage(cardCodes, roundInfo, config.message_template);
@@ -165,14 +220,14 @@ async function sendWhatsAppMessage(apiUrl, apiKey, from, to, message) {
 export async function sendWinnerNotification(phone, cardCode, prizeAmount) {
   try {
     const configResult = await db.query(
-      'SELECT * FROM whatsapp_config WHERE id = 1'
+      "SELECT value FROM settings WHERE key = 'whatsapp_config'"
     );
 
-    if (configResult.rows.length === 0 || !configResult.rows[0].is_active) {
+    if (configResult.rows.length === 0 || !configResult.rows[0].value.is_active) {
       return { success: false, error: 'WhatsApp não configurado' };
     }
 
-    const config = configResult.rows[0];
+    const config = configResult.rows[0].value;
 
     const message = `🎊 *PARABÉNS! VOCÊ GANHOU!* 🎊
 
@@ -214,14 +269,14 @@ _Parabéns novamente!_ 🎉`;
 export async function testWhatsAppConfig(testPhone) {
   try {
     const configResult = await db.query(
-      'SELECT * FROM whatsapp_config WHERE id = 1'
+      "SELECT value FROM settings WHERE key = 'whatsapp_config'"
     );
 
     if (configResult.rows.length === 0) {
       return { success: false, error: 'WhatsApp não configurado' };
     }
 
-    const config = configResult.rows[0];
+    const config = configResult.rows[0].value;
 
     const testMessage = `🧪 *SORTEBEM - Teste de Configuração*
 

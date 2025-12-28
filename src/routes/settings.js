@@ -1,6 +1,8 @@
 import { db } from '../config/database.js';
 import { authAdmin } from '../middleware/auth.js';
 import { getSetting, setSetting, logAudit, successResponse, errorResponse } from '../utils/helpers.js';
+import { testAsaasConfig } from '../services/asaasService.js';
+import { testPagSeguroConfig } from '../services/pagseguroService.js';
 
 export default async function settingsRoutes(fastify) {
   // GET / (admin only)
@@ -65,7 +67,9 @@ export default async function settingsRoutes(fastify) {
         'card_price_special',
         'round_duration_regular',
         'round_duration_special',
-        'winning_patterns'
+        'winning_patterns',
+        'card_appearance',
+        'platform_name'
       ];
 
       const result = await db.query(
@@ -82,6 +86,81 @@ export default async function settingsRoutes(fastify) {
     } catch (error) {
       console.error('Error fetching public settings:', error);
       return reply.status(500).send(errorResponse('Erro ao buscar configurações'));
+    }
+  });
+
+  // GET /:key (admin only)
+  fastify.get('/:key', { preHandler: authAdmin }, async (request, reply) => {
+    try {
+      const { key } = request.params;
+
+      const result = await db.query(
+        'SELECT value FROM settings WHERE key = $1',
+        [key]
+      );
+
+      if (result.rows.length === 0) {
+        return reply.status(404).send(errorResponse('Configuração não encontrada'));
+      }
+
+      return reply.send(successResponse(result.rows[0].value));
+    } catch (error) {
+      console.error('Error fetching setting:', error);
+      return reply.status(500).send(errorResponse('Erro ao buscar configuração'));
+    }
+  });
+
+  // PUT /:key (admin only)
+  fastify.put('/:key', { preHandler: authAdmin }, async (request, reply) => {
+    try {
+      const { key } = request.params;
+      const { value } = request.body;
+
+      const oldValue = await getSetting(key);
+
+      await setSetting(key, value);
+
+      // Log de auditoria
+      await logAudit({
+        userId: request.user.id,
+        action: 'update',
+        entity: 'settings',
+        entityId: key,
+        oldData: { [key]: oldValue },
+        newData: { [key]: value },
+        ipAddress: request.ip
+      });
+
+      return reply.send(successResponse({ key, value }));
+    } catch (error) {
+      console.error('Error updating setting:', error);
+      return reply.status(500).send(errorResponse('Erro ao atualizar configuração'));
+    }
+  });
+
+  // POST /gateway/test (admin only)
+  fastify.post('/gateway/test', { preHandler: authAdmin }, async (request, reply) => {
+    try {
+      const { gateway } = request.body;
+
+      let testResult;
+
+      if (gateway === 'asaas') {
+        testResult = await testAsaasConfig();
+      } else if (gateway === 'pagseguro') {
+        testResult = await testPagSeguroConfig();
+      } else {
+        return reply.status(400).send(errorResponse('Gateway inválido'));
+      }
+
+      if (!testResult) {
+        return reply.status(400).send(errorResponse('Falha ao testar gateway. Verifique as configurações.'));
+      }
+
+      return reply.send(successResponse({ message: 'Gateway testado com sucesso', gateway }));
+    } catch (error) {
+      console.error('Error testing gateway:', error);
+      return reply.status(500).send(errorResponse('Erro ao testar gateway: ' + error.message));
     }
   });
 }

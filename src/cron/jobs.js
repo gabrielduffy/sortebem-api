@@ -7,6 +7,7 @@ import {
 } from '../services/roundManager.js';
 import { generateCards } from '../services/cardGenerator.js';
 import { sendCardsViaWhatsApp } from '../services/whatsappService.js';
+import { checkPaymentStatus } from '../services/paymentService.js';
 
 /* =========================
    CRON JOBS
@@ -34,6 +35,15 @@ export function startCronJobs() {
       await checkExpiredPurchases();
     } catch (error) {
       console.error('Error in expired purchases job:', error);
+    }
+  });
+
+  // A cada 30 segundos: verificar status de pagamentos pendentes
+  cron.schedule('*/30 * * * * *', async () => {
+    try {
+      await checkPendingPayments();
+    } catch (error) {
+      console.error('Error in payment status check job:', error);
     }
   });
 
@@ -72,6 +82,28 @@ export function startCronJobs() {
 ========================= */
 
 /**
+ * Verifica status de pagamentos pendentes
+ */
+async function checkPendingPayments() {
+  const result = await db.query(
+    `SELECT id FROM purchases
+     WHERE payment_status = 'pending'
+     AND payment_method IN ('pix', 'credit_card')
+     AND created_at > NOW() - INTERVAL '10 minutes'
+     ORDER BY created_at DESC
+     LIMIT 20`
+  );
+
+  for (const purchase of result.rows) {
+    try {
+      await checkPaymentStatus(purchase.id);
+    } catch (error) {
+      console.error(`Error checking payment for purchase ${purchase.id}:`, error);
+    }
+  }
+}
+
+/**
  * Verifica e marca compras PIX expiradas
  */
 async function checkExpiredPurchases() {
@@ -80,12 +112,22 @@ async function checkExpiredPurchases() {
      SET payment_status = 'expired'
      WHERE payment_status = 'pending'
        AND payment_method = 'pix'
-       AND pix_expiration < NOW()
+       AND expires_at < NOW()
      RETURNING id`
   );
 
   if (result.rows.length > 0) {
     console.log(`✓ Expired ${result.rows.length} purchases`);
+
+    // Liberar cartelas das compras expiradas
+    for (const purchase of result.rows) {
+      await db.query(
+        `UPDATE cards
+         SET status = 'available', purchase_id = NULL, user_id = NULL
+         WHERE purchase_id = $1`,
+        [purchase.id]
+      );
+    }
   }
 }
 
