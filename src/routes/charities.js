@@ -4,7 +4,7 @@ import { successResponse, errorResponse, logAudit } from '../utils/helpers.js';
 
 export default async function charitiesRoutes(fastify) {
   // GET /charities (admin only)
-  fastify.get('/charities', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query('SELECT * FROM charities ORDER BY created_at DESC');
       return reply.send(successResponse(result.rows));
@@ -15,7 +15,7 @@ export default async function charitiesRoutes(fastify) {
   });
 
   // GET /charities/active (público)
-  fastify.get('/charities/active', async (request, reply) => {
+  fastify.get('/active', async (request, reply) => {
     try {
       const now = new Date();
       const month = now.getMonth() + 1;
@@ -36,7 +36,7 @@ export default async function charitiesRoutes(fastify) {
   });
 
   // POST /charities (admin only)
-  fastify.post('/charities', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.post('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { name, description, logo_url, pix_key } = request.body;
 
@@ -64,7 +64,7 @@ export default async function charitiesRoutes(fastify) {
   });
 
   // PUT /charities/:id (admin only)
-  fastify.put('/charities/:id', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.put('/:id', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const { id } = request.params;
       const { name, description, logo_url, pix_key, is_active } = request.body;
@@ -102,7 +102,7 @@ export default async function charitiesRoutes(fastify) {
   });
 
   // POST /charities/:id/activate (admin only)
-  fastify.post('/charities/:id/activate', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.post('/:id/activate', { preHandler: authAdmin }, async (request, reply) => {
     const client = await db.connect();
     try {
       const { id } = request.params;

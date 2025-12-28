@@ -6,7 +6,7 @@ import { successResponse, errorResponse, logAudit } from '../utils/helpers.js';
 
 export default async function establishmentsRoutes(fastify) {
   // GET /establishments (admin only)
-  fastify.get('/establishments', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.get('/', { preHandler: authAdmin }, async (request, reply) => {
     try {
       const result = await db.query(
         `SELECT e.*, u.name, u.email, u.whatsapp, m.code as manager_code
@@ -23,7 +23,7 @@ export default async function establishmentsRoutes(fastify) {
   });
 
   // POST /establishments (admin only)
-  fastify.post('/establishments', { preHandler: authAdmin }, async (request, reply) => {
+  fastify.post('/', { preHandler: authAdmin }, async (request, reply) => {
     const client = await db.connect();
     try {
       const { name, email, whatsapp, password, establishment_name, cnpj, phone, address, city, state, manager_id } = request.body;
@@ -82,7 +82,7 @@ export default async function establishmentsRoutes(fastify) {
   });
 
   // GET /establishments/by-slug/:slug (público - para modo TV)
-  fastify.get('/establishments/by-slug/:slug', async (request, reply) => {
+  fastify.get('/by-slug/:slug', async (request, reply) => {
     try {
       const { slug } = request.params;
 

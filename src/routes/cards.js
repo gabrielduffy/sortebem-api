@@ -5,7 +5,7 @@ import { getSetting, successResponse, errorResponse } from '../utils/helpers.js'
 
 export default async function cardsRoutes(fastify) {
   // GET /cards/:code (público - ver cartela pelo código)
-  fastify.get('/cards/:code', async (request, reply) => {
+  fastify.get('/:code', async (request, reply) => {
     try {
       const { code } = request.params;
 
@@ -23,7 +23,7 @@ export default async function cardsRoutes(fastify) {
   });
 
   // GET /cards/:code/check (público - verificar se cartela ganhou)
-  fastify.get('/cards/:code/check', async (request, reply) => {
+  fastify.get('/:code/check', async (request, reply) => {
     try {
       const { code } = request.params;
 
@@ -76,7 +76,7 @@ export default async function cardsRoutes(fastify) {
   });
 
   // POST /cards/:code/declare-victory (público - declarar vitória)
-  fastify.post('/cards/:code/declare-victory', async (request, reply) => {
+  fastify.post('/:code/declare-victory', async (request, reply) => {
     const client = await db.connect();
 
     try {
