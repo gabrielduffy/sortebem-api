@@ -28,7 +28,8 @@ export default async function purchasesRoutes(fastify) {
         payment_method,
         customer: customer || 'não fornecido',
         card_token: card_token ? '***' : undefined,
-        installments
+        installments,
+        NODE_ENV: process.env.NODE_ENV || 'não definido'
       });
 
       // Validações básicas - customer é OPCIONAL
@@ -195,6 +196,21 @@ export default async function purchasesRoutes(fastify) {
       } catch (paymentError) {
         console.error('❌ ERRO ao processar pagamento:', paymentError);
         console.error('Stack:', paymentError.stack);
+
+        // Identificar se é erro de configuração
+        const isConfigError =
+          paymentError.message.includes('não configurado') ||
+          paymentError.message.includes('Configuração') ||
+          paymentError.message.includes('não encontrada');
+
+        if (isConfigError) {
+          return reply.status(400).send(errorResponse({
+            message: 'Gateway de pagamento não configurado',
+            details: paymentError.message,
+            action: 'Configure as credenciais do Asaas ou PagSeguro nas configurações do sistema'
+          }));
+        }
+
         return reply.status(400).send(errorResponse('Erro ao processar pagamento: ' + paymentError.message));
       }
 
