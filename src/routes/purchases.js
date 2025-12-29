@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { db } from '../config/database.js';
 import { validate } from '../middleware/validate.js';
 import { generateCards } from '../services/cardGenerator.js';
@@ -99,13 +100,16 @@ export default async function purchasesRoutes(fastify) {
         if (userResult.rows.length > 0) {
           userId = userResult.rows[0].id;
           console.log('✅ Usuário existente encontrado:', userId);
-        } else if (customerData.name) {
+        } else if (customerData.name && customerData.email) {
           // Criar usuário apenas se tiver nome e email
+          // Nota: users não tem cpf/phone, apenas whatsapp
+          const password_hash = await bcrypt.hash(Math.random().toString(36), 10);
+
           const newUserResult = await client.query(
-            `INSERT INTO users (name, email, phone, cpf, role, is_active)
+            `INSERT INTO users (name, email, whatsapp, password_hash, role, is_active)
              VALUES ($1, $2, $3, $4, 'user', true)
              RETURNING id`,
-            [customerData.name, customerData.email, customerData.phone, customerData.cpf]
+            [customerData.name, customerData.email, customerData.phone, password_hash]
           );
           userId = newUserResult.rows[0].id;
           console.log('✅ Novo usuário criado:', userId);

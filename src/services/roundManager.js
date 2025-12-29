@@ -36,14 +36,16 @@ export async function createNextRound(type = 'regular') {
 
     const maxCards = await getSetting('max_cards_per_round');
 
-    // Buscar último número de rodada
+    // Buscar último número de rodada com lock para evitar duplicatas
     const lastRoundResult = await client.query(
-      'SELECT number FROM rounds ORDER BY number DESC LIMIT 1'
+      'SELECT number FROM rounds ORDER BY number DESC LIMIT 1 FOR UPDATE'
     );
 
     const nextNumber = lastRoundResult.rows.length > 0
       ? lastRoundResult.rows[0].number + 1
       : 1;
+
+    console.log(`🔢 Próximo número de rodada: ${nextNumber}`);
 
     // Calcular horários
     const now = new Date();
