@@ -317,27 +317,39 @@ export async function checkAndCreateRounds() {
   try {
     const now = new Date();
 
-    // Verificar rodadas regulares
+    // Verificar rodadas regulares (ativas ou futuras)
     const nextRegular = await db.query(
       `SELECT * FROM rounds
-       WHERE type = 'regular' AND status = 'scheduled'
+       WHERE type = 'regular'
+         AND status IN ('selling', 'drawing', 'scheduled')
+         AND (ends_at > $1 OR status = 'scheduled')
        ORDER BY starts_at ASC
-       LIMIT 1`
+       LIMIT 1`,
+      [now]
     );
 
-    if (nextRegular.rows.length === 0 || new Date(nextRegular.rows[0].starts_at) < addMinutes(now, 5)) {
+    // Criar nova rodada regular se:
+    // 1. Não há nenhuma rodada regular ativa/futura, OU
+    // 2. A próxima rodada termina em menos de 5 minutos
+    if (nextRegular.rows.length === 0 || new Date(nextRegular.rows[0].ends_at) < addMinutes(now, 5)) {
       await createNextRound('regular');
     }
 
-    // Verificar rodadas especiais
+    // Verificar rodadas especiais (ativas ou futuras)
     const nextSpecial = await db.query(
       `SELECT * FROM rounds
-       WHERE type = 'special' AND status = 'scheduled'
+       WHERE type = 'special'
+         AND status IN ('selling', 'drawing', 'scheduled')
+         AND (ends_at > $1 OR status = 'scheduled')
        ORDER BY starts_at ASC
-       LIMIT 1`
+       LIMIT 1`,
+      [now]
     );
 
-    if (nextSpecial.rows.length === 0 || new Date(nextSpecial.rows[0].starts_at) < addMinutes(now, 30)) {
+    // Criar nova rodada especial se:
+    // 1. Não há nenhuma rodada especial ativa/futura, OU
+    // 2. A próxima rodada termina em menos de 30 minutos
+    if (nextSpecial.rows.length === 0 || new Date(nextSpecial.rows[0].ends_at) < addMinutes(now, 30)) {
       await createNextRound('special');
     }
   } catch (error) {
