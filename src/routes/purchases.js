@@ -10,6 +10,9 @@ import { authAdmin } from '../middleware/auth.js';
 export default async function purchasesRoutes(fastify) {
   // POST /purchases (público - criar compra)
   fastify.post('/', async (request, reply) => {
+    console.log('🔵 1. POST /purchases INICIADO');
+    console.log('🔵 Body recebido:', JSON.stringify(request.body, null, 2));
+
     const client = await db.connect();
 
     try {
@@ -60,13 +63,16 @@ export default async function purchasesRoutes(fastify) {
 
       console.log('✅ Customer data limpo:', customerData);
 
+      console.log('🔵 2. Iniciando transação no banco');
       await client.query('BEGIN');
 
+      console.log('🔵 3. Buscando rodada:', round_id);
       // Verificar rodada
       const roundResult = await client.query(
         'SELECT * FROM rounds WHERE id = $1 AND status = $2 AND is_selling = true',
         [round_id, 'selling']
       );
+      console.log('🔵 4. Query de rodada executada. Resultado:', roundResult.rows.length > 0 ? 'ENCONTRADA' : 'NÃO ENCONTRADA');
 
       if (roundResult.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -116,6 +122,7 @@ export default async function purchasesRoutes(fastify) {
         }
       }
 
+      console.log('🔵 5. Criando purchase no banco de dados');
       // Criar compra
       const purchaseResult = await client.query(
         `INSERT INTO purchases (
@@ -135,6 +142,7 @@ export default async function purchasesRoutes(fastify) {
       const purchase = purchaseResult.rows[0];
       console.log('✅ Purchase criada:', { id: purchase.id, total_amount: purchase.total_amount });
 
+      console.log('🔵 6. Gerando cartelas. Quantidade:', quantity);
       // Gerar cartelas
       const cards = await generateCards(round_id, purchase.id, userId, quantity, client);
       console.log('✅ Cartelas geradas:', cards.length);
@@ -148,12 +156,13 @@ export default async function purchasesRoutes(fastify) {
       await client.query('COMMIT');
       console.log('✅ Transação commitada');
 
+      console.log('🔵 7. Iniciando processamento de pagamento. Método:', payment_method);
       // Processar pagamento
       let paymentData;
 
       try {
         if (payment_method === 'pix') {
-          console.log('🔄 Criando pagamento PIX...');
+          console.log('🔵 8. Criando pagamento PIX...');
           paymentData = await createPixPayment({
             purchase,
             customer: customerData
@@ -180,6 +189,7 @@ export default async function purchasesRoutes(fastify) {
         }
 
         console.log('🎉 Purchase completa com sucesso:', purchase.id);
+        console.log('🔵 9. Retornando resposta ao cliente');
 
         return reply.status(201).send(successResponse({
           id: purchase.id,
